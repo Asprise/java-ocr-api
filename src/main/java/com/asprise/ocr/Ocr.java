@@ -39,7 +39,7 @@ import java.util.Properties;
 
 /**
  * Represents an engine of Asprise OCR - a high performance OCR engine for Java/C#/VB.NET/C/C++ on Windows, Linux, Mac OS X and Unix.
- * <a></a>
+ * <p><a href='http://asprise.com/ocr/docs/html/?src=javadoc' target='_blank'>Click here to access the Asprise OCR developer's guide.</a></p>
  * <p>
  *     The OCR engine is capable of recognizing text in 20+ languages (English, Spanish, French, German, Italian,
  *     Hungarian, Finnish, Swedish, Romanian, Polish, Malay, Arabic, Indonesian, and Russian) and 1-D/2-D barcode of most
@@ -92,6 +92,21 @@ public class Ocr {
     /** fra (French) */
     public static final String LANGUAGE_FRA = "fra";
     // around 30 languages are supported - use their ISO 639 3-letter as the id
+
+    // ------------------------ dictionary properties ------------------------
+
+    /** set to 'true' to skip using the default built in dict. Default value: 'false' - can only be used for {@linkplain #startEngine(String, String, Object...)}*/
+    public static final String START_PROP_DICT_SKIP_BUILT_IN_DEFAULT = "START_PROP_DICT_SKIP_BUILT_IN_DEFAULT";
+
+    /** set to 'true' to skip using all built-in dicts. Default value: 'false' - can only be used for {@linkplain #startEngine(String, String, Object...)}*/
+    public static final String START_PROP_DICT_SKIP_BUILT_IN_ALL = "START_PROP_DICT_SKIP_BUILT_IN_ALL";
+    /** Path to your custom dictionary (words are separated using line breaks). Default value: null. - can only be used for {@linkplain #startEngine(String, String, Object...)}*/
+    public static final String START_PROP_DICT_CUSTOM_DICT_FILE = "START_PROP_DICT_CUSTOM_DICT_FILE";
+    /** Path to your custom templates (templates are separated using line breaks). Default value: null. - can only be used for {@linkplain #startEngine(String, String, Object...)} */
+    public static final String START_PROP_DICT_CUSTOM_TEMPLATES_FILE = "START_PROP_DICT_CUSTOM_TEMPLATES_FILE";
+
+    /** Percentage measuring the importance of the dictionary (0: not at all; 100: extremely important; default: 10) */
+    public static final String PROP_DICT_DICT_IMPORTANCE = "PROP_DICT_DICT_IMPORTANCE";
 
     // ------------------------ general options ------------------------
 
@@ -174,6 +189,46 @@ public class Ocr {
 
     /** Builder for configuring scan properties. */
     public static class PropertyBuilder extends Properties {
+
+        /** set to 'true' to skip using the default built in dict. Default value: 'false' - can only be used for {@linkplain #startEngine(String, String, Object...)}*/
+        public PropertyBuilder setDictSkipBuiltInDefault(boolean skip) {
+            setProperty(START_PROP_DICT_SKIP_BUILT_IN_DEFAULT, skip ? "true" : "false");
+            return this;
+        }
+
+        /** set to 'true' to skip using all built-in dicts. Default value: 'false' - can only be used for {@linkplain #startEngine(String, String, Object...)}*/
+        public PropertyBuilder setDictSkipBuiltInAll(boolean skip) {
+            setProperty(START_PROP_DICT_SKIP_BUILT_IN_ALL, skip ? "true" : "false");
+            return this;
+        }
+
+        /** Path to your custom dictionary (words are separated using line breaks). Default value: null. - can only be used for {@linkplain #startEngine(String, String, Object...)}*/
+        public PropertyBuilder setDictCustomDictFile(File customDictFile) {
+            if(customDictFile == null) {
+                remove(START_PROP_DICT_CUSTOM_DICT_FILE);
+            } else {
+                setProperty(START_PROP_DICT_CUSTOM_DICT_FILE, customDictFile.getAbsolutePath());
+            }
+            return this;
+        }
+
+        /** Path to your custom templates (templates are separated using line breaks). Default value: null. - can only be used for {@linkplain #startEngine(String, String, Object...)} */
+        public PropertyBuilder setDictCustomTemplatesFile(File customTemplatesFile) {
+            if(customTemplatesFile == null) {
+                remove(START_PROP_DICT_CUSTOM_TEMPLATES_FILE);
+            } else {
+                setProperty(START_PROP_DICT_CUSTOM_TEMPLATES_FILE, customTemplatesFile.getAbsolutePath());
+            }
+            return this;
+        }
+
+        /** Percentage measuring the importance of the dictionary (0: not at all; 100: extremely important; default: 10) */
+        public PropertyBuilder setDictImportance(int importance) {
+            setProperty(PROP_DICT_DICT_IMPORTANCE, Integer.toString(importance));
+            return this;
+        }
+
+        /*---- general recognition options -- */
 
         /** hints the page type to the OCR engine */
         public PropertyBuilder setPageType(PageType pageType) {
@@ -409,11 +464,12 @@ public class Ocr {
     }
 
     /**
-     * Starts the OCR engine; does nothing if the engine has already been started.
+     * Starts the OCR engine with optional properties (e.g., to specify dictionary/templates file)
      * @param lang e.g., "eng" for English
      * @param speed valid values: {@linkplain #SPEED_FASTEST}, {@linkplain #SPEED_FAST}, {@linkplain #SPEED_SLOW}.
+     * @param startPropSpec optional start properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs. Valid property names are defined in this class, etc.
      */
-    public void startEngine(String lang, String speed) {
+    public void startEngine(String lang, String speed, Object... startPropSpec) {
         if(handle > 0) {
             return;
         }
@@ -426,7 +482,9 @@ public class Ocr {
             throw new IllegalArgumentException("Invalid speed: " + speed);
         }
 
-        String s = doStart(lang, speed);
+        Properties props = readProperties(startPropSpec);
+
+        String s = doStart(lang, speed, propsToString(props), CONFIG_PROP_SEPARATOR, CONFIG_PROP_KEY_VALUE_SEPARATOR);
         if(s != null) {
             throw new OcrException(s);
         }
@@ -578,6 +636,28 @@ public class Ocr {
         }
 
         // process properties
+        Properties props = readProperties(propSpec);
+
+        try {
+            threadDoingOCR = Thread.currentThread();
+            // validation
+            if(StringUtils.isEmpty(files)) {
+                throw new IllegalArgumentException("files can not be empty!");
+            }
+
+            // PDF output
+            String pdfOutputFile = props.getProperty(PROP_PDF_OUTPUT_FILE);
+            if((OUTPUT_FORMAT_PDF.equals(outputFormat)) && StringUtils.isEmpty(pdfOutputFile)) {
+                throw new IllegalArgumentException("You must specify PDF output through property named: " + PROP_PDF_OUTPUT_FILE);
+            }
+
+            return doRecognize(files, pageIndex, startX, startY, width, height, recognizeType, outputFormat, propsToString(props), CONFIG_PROP_SEPARATOR, CONFIG_PROP_KEY_VALUE_SEPARATOR);
+        } finally {
+            threadDoingOCR = null;
+        }
+    }
+
+    protected static Properties readProperties(Object[] propSpec) {
         Properties props = new Properties();
         if(propSpec == null || propSpec.length == 0 || (propSpec.length == 1 && propSpec[0] == null)) {
             // nothing to do.
@@ -591,7 +671,15 @@ public class Ocr {
             for (int p = 0; p < propSpec.length; p += 2) {
                 Object key = propSpec[p];
                 Object value = propSpec[p + 1];
-                props.setProperty(String.valueOf(key), String.valueOf(value));
+                String valueAsString = null;
+                if(value == null) {
+                    valueAsString = "";
+                } else if(value instanceof File) {
+                    valueAsString = ((File)value).getAbsolutePath();
+                } else {
+                    valueAsString = String.valueOf(value);
+                }
+                props.setProperty(String.valueOf(key), valueAsString);
             }
         }
 
@@ -612,24 +700,7 @@ public class Ocr {
                         value + "\" contains \"" + CONFIG_PROP_SEPARATOR + "\"");
             }
         }
-
-        try {
-            threadDoingOCR = Thread.currentThread();
-            // validation
-            if(StringUtils.isEmpty(files)) {
-                throw new IllegalArgumentException("files can not be empty!");
-            }
-
-            // PDF output
-            String pdfOutputFile = props.getProperty(PROP_PDF_OUTPUT_FILE);
-            if((OUTPUT_FORMAT_PDF.equals(outputFormat)) && StringUtils.isEmpty(pdfOutputFile)) {
-                throw new IllegalArgumentException("You must specify PDF output through property named: " + PROP_PDF_OUTPUT_FILE);
-            }
-
-            return doRecognize(files, pageIndex, startX, startY, width, height, recognizeType, outputFormat, propsToString(props), CONFIG_PROP_SEPARATOR, CONFIG_PROP_KEY_VALUE_SEPARATOR);
-        } finally {
-            threadDoingOCR = null;
-        }
+        return props;
     }
 
     private static String propsToString(Properties props) {
@@ -675,7 +746,7 @@ public class Ocr {
 
     private native static String doListSupportedLangs();
 
-    private native String doStart(String lang, String speed);
+    private native String doStart(String lang, String speed, String properties, String propSeparator, String propNameValueSeparator);
 
     private native String doRecognize(String file, int pageIndex, int startX, int startY, int width, int height, String recognizeType, String outputFormat, String properties, String propSeparator, String propNameValueSeparator);
 
