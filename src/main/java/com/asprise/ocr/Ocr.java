@@ -36,6 +36,7 @@ import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Properties;
+import java.util.StringTokenizer;
 
 /**
  * Represents an engine of Asprise OCR - a high performance OCR engine for Java/C#/VB.NET/C/C++ on Windows, Linux, Mac OS X and Unix.
@@ -79,6 +80,8 @@ public class Ocr {
     public static final String OUTPUT_FORMAT_XML       = "xml";
     /** Output recognition result as searchable PDF */
     public static final String OUTPUT_FORMAT_PDF       = "pdf";
+    /** Output to editable format RTF (can be edited in MS Word) */
+    public static final String OUTPUT_FORMAT_RTF       = "rtf";
 
     /** Common used languages */
     /** eng (English) */
@@ -175,9 +178,20 @@ public class Ocr {
     public static final String PROP_PDF_OUTPUT_CONF_THRESHOLD = "PROP_PDF_OUTPUT_CONF_THRESHOLD";
 
     /** Return text in 'text' or 'xml' format when the output format is set to PDF. */
-    public static final String PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT = "PROP_PDF_OUTPUT_RETURN_TEXT";
+    public static final String PROP_PDF_OUTPUT_RETURN_TEXT = "PROP_PDF_OUTPUT_RETURN_TEXT";
     public static final String PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT_PLAINTEXT = "text";
     public static final String PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT_XML = "xml";
+
+    // ------------------------ RTF specific ------------------------
+    /** RTF output file - required for RTF output. Valid prop value: absolute path to the target output file. */
+    public static final String PROP_RTF_OUTPUT_FILE         = "PROP_RTF_OUTPUT_FILE";
+    /** default is LETTER, may set to A4. */
+    public static final String PROP_RTF_PAPER_SIZE           = "PROP_RTF_PAPER_SIZE";
+
+    /** Return text in 'text' or 'xml' format when the output format is set to RTF. */
+    public static final String PROP_RTF_OUTPUT_RETURN_TEXT = "PROP_RTF_OUTPUT_RETURN_TEXT";
+    public static final String PROP_RTF_OUTPUT_RETURN_TEXT_FORMAT_PLAINTEXT = "text";
+    public static final String PROP_RTF_OUTPUT_RETURN_TEXT_FORMAT_XML = "xml";
 
     /** Do not change unless you are told so. */
     public static String CONFIG_PROP_SEPARATOR = "|";
@@ -341,19 +355,45 @@ public class Ocr {
 
         /** Return plain text when the output format is set to PDF.*/
         public PropertyBuilder setPdfOutputReturnPlainText() {
-            setProperty(PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT, PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT_PLAINTEXT);
+            setProperty(PROP_PDF_OUTPUT_RETURN_TEXT, PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT_PLAINTEXT);
             return this;
         }
 
         /** Return xml when the output format is set to PDF.*/
         public PropertyBuilder setPdfOutputReturnXml() {
-            setProperty(PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT, PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT_XML);
+            setProperty(PROP_PDF_OUTPUT_RETURN_TEXT, PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT_XML);
             return this;
         }
 
         /** Return neither plain text nor xml when the output format is set to PDF.*/
         public PropertyBuilder setPdfOutputReturnNothing() {
-            remove(PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT);
+            remove(PROP_PDF_OUTPUT_RETURN_TEXT);
+            return this;
+        }
+
+        // ------------------------ RTF output specific ------------------------
+
+        /** Target rtf output file when output format is set to rtf */
+        public PropertyBuilder setRtfOutputFile(File file) {
+            setProperty(PROP_RTF_OUTPUT_FILE, file.getAbsolutePath());
+            return this;
+        }
+
+        /** Return plain text when the output format is set to RTF.*/
+        public PropertyBuilder setRtfOutputReturnPlainText() {
+            setProperty(PROP_RTF_OUTPUT_RETURN_TEXT, PROP_RTF_OUTPUT_RETURN_TEXT_FORMAT_PLAINTEXT);
+            return this;
+        }
+
+        /** Return xml when the output format is set to rtf.*/
+        public PropertyBuilder setRtfOutputReturnXml() {
+            setProperty(PROP_RTF_OUTPUT_RETURN_TEXT, PROP_PDF_OUTPUT_RETURN_TEXT_FORMAT_XML);
+            return this;
+        }
+
+        /** Return neither plain text nor xml when the output format is set to RTF.*/
+        public PropertyBuilder setRtfOutputReturnNothing() {
+            remove(PROP_RTF_OUTPUT_RETURN_TEXT);
             return this;
         }
     }
@@ -467,7 +507,7 @@ public class Ocr {
      * Starts the OCR engine with optional properties (e.g., to specify dictionary/templates file)
      * @param lang e.g., "eng" for English
      * @param speed valid values: {@linkplain #SPEED_FASTEST}, {@linkplain #SPEED_FAST}, {@linkplain #SPEED_SLOW}.
-     * @param startPropSpec optional start properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs. Valid property names are defined in this class, etc.
+     * @param startPropSpec optional start properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs or a single string. Valid property names are defined in this class, etc.
      */
     public void startEngine(String lang, String speed, Object... startPropSpec) {
         if(handle > 0) {
@@ -522,8 +562,8 @@ public class Ocr {
      * </p>
      * @param sources input image files - can be local files or files on remote server
      * @param recognizeType valid values: {@linkplain #RECOGNIZE_TYPE_TEXT}, {@linkplain #RECOGNIZE_TYPE_BARCODE} or {@linkplain #RECOGNIZE_TYPE_ALL}.
-     * @param outputFormat valid values: {@linkplain #OUTPUT_FORMAT_PLAINTEXT}, {@linkplain #OUTPUT_FORMAT_XML} or {@linkplain #OUTPUT_FORMAT_PDF}.
-     * @param propSpec additional properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs. Valid property names are defined in this class, etc.
+     * @param outputFormat valid values: {@linkplain #OUTPUT_FORMAT_PLAINTEXT}, {@linkplain #OUTPUT_FORMAT_XML}, {@linkplain #OUTPUT_FORMAT_PDF} or {@linkplain #OUTPUT_FORMAT_RTF}.
+     * @param propSpec additional properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs or a single string. Valid property names are defined in this class, etc.
      * @return the recognition output in the specified format or <pre>null</pre> if there is no input file.
      */
     public String recognize(URL[] sources, String recognizeType, String outputFormat, Object... propSpec) {
@@ -565,8 +605,8 @@ public class Ocr {
      * </p>
      * @param files input image files - files must exist and file name can not contain ','
      * @param recognizeType valid values: {@linkplain #RECOGNIZE_TYPE_TEXT}, {@linkplain #RECOGNIZE_TYPE_BARCODE} or {@linkplain #RECOGNIZE_TYPE_ALL}.
-     * @param outputFormat valid values: {@linkplain #OUTPUT_FORMAT_PLAINTEXT}, {@linkplain #OUTPUT_FORMAT_XML} or {@linkplain #OUTPUT_FORMAT_PDF}.
-     * @param propSpec additional properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs. Valid property names are defined in this class, etc.
+     * @param outputFormat valid values: {@linkplain #OUTPUT_FORMAT_PLAINTEXT}, {@linkplain #OUTPUT_FORMAT_XML}, {@linkplain #OUTPUT_FORMAT_PDF} or {@linkplain #OUTPUT_FORMAT_RTF}.
+     * @param propSpec additional properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs or a single string. Valid property names are defined in this class, etc.
      * @return the recognition output in the specified format or <pre>null</pre> if there is no input file.
      */
     public String recognize(File[] files, String recognizeType, String outputFormat, Object... propSpec) {
@@ -583,8 +623,8 @@ public class Ocr {
      * Performs text/barcode recognition on the given image with the specified output format.
      * @param img input image
      * @param recognizeType valid values: {@linkplain #RECOGNIZE_TYPE_TEXT}, {@linkplain #RECOGNIZE_TYPE_BARCODE} or {@linkplain #RECOGNIZE_TYPE_ALL}.
-     * @param outputFormat valid values: {@linkplain #OUTPUT_FORMAT_PLAINTEXT}, {@linkplain #OUTPUT_FORMAT_XML} or {@linkplain #OUTPUT_FORMAT_PDF}.
-     * @param propSpec additional properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs. Valid property names are defined in this class, etc.
+     * @param outputFormat valid values: {@linkplain #OUTPUT_FORMAT_PLAINTEXT}, {@linkplain #OUTPUT_FORMAT_XML}, {@linkplain #OUTPUT_FORMAT_PDF} or {@linkplain #OUTPUT_FORMAT_RTF}.
+     * @param propSpec additional properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs or a single string. Valid property names are defined in this class, etc.
      * @return the recognition output in the specified format or <pre>null</pre> if there is no input file.
      */
     public String recognize(RenderedImage img, String recognizeType, String outputFormat, Object... propSpec) {
@@ -617,22 +657,14 @@ public class Ocr {
      * @param width -1 for whole page or the width of the specified region
      * @param height -1 for whole page or the height of the specified region
      * @param recognizeType valid values: {@linkplain #RECOGNIZE_TYPE_TEXT}, {@linkplain #RECOGNIZE_TYPE_BARCODE} or {@linkplain #RECOGNIZE_TYPE_ALL}.
-     * @param outputFormat valid values: {@linkplain #OUTPUT_FORMAT_PLAINTEXT} or {@linkplain #OUTPUT_FORMAT_XML}.
-     * @param propSpec additional properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs. Valid property names are defined in this class, etc.
+     * @param outputFormat valid values: {@linkplain #OUTPUT_FORMAT_PLAINTEXT}, {@linkplain #OUTPUT_FORMAT_XML}, {@linkplain #OUTPUT_FORMAT_PDF} or {@linkplain #OUTPUT_FORMAT_RTF}
+     * @param propSpec additional properties, can be a single {@linkplain java.util.Properties} object or inline specification in pairs or a single string. Valid property names are defined in this class, etc.
      * @return text (plain text, xml) recognized for {@linkplain #OUTPUT_FORMAT_PLAINTEXT}, {@linkplain #OUTPUT_FORMAT_XML}; null for {@linkplain #OUTPUT_FORMAT_PDF}.
      */
     public String recognize(String files, int pageIndex, int startX, int startY, int width, int height, String recognizeType, String outputFormat,
         Object... propSpec) {
         if(threadDoingOCR != null) {
             throw new OcrException("Currently " + threadDoingOCR + " is using this OCR engine. Please create multiple OCR engine instances for multi-threading. ");
-        }
-
-        if(! (RECOGNIZE_TYPE_ALL.equals(recognizeType) || RECOGNIZE_TYPE_BARCODE.equals(recognizeType) || RECOGNIZE_TYPE_TEXT.equals(recognizeType))) {
-            throw new IllegalArgumentException("Invalid recognize type: " + recognizeType);
-        }
-
-        if(! (OUTPUT_FORMAT_PDF.equals(outputFormat) || OUTPUT_FORMAT_XML.equals(outputFormat) || OUTPUT_FORMAT_PLAINTEXT.equals(outputFormat))) {
-            throw new IllegalArgumentException("Invalid output format: " + outputFormat);
         }
 
         // process properties
@@ -661,13 +693,15 @@ public class Ocr {
         Properties props = new Properties();
         if(propSpec == null || propSpec.length == 0 || (propSpec.length == 1 && propSpec[0] == null)) {
             // nothing to do.
+        } else if(propSpec.length == 1 && propSpec[0] instanceof String) {
+            // parse properties
+            props = stringToProps((String)propSpec[0]);
         } else if(propSpec.length > 0 && (propSpec[0] instanceof Properties)) {
             props = (Properties) propSpec[0];
         } else {
             if (propSpec.length % 2 == 1) {
                 throw new IllegalArgumentException("Property specification must come in pairs: " + Arrays.toString(propSpec));
             }
-
             for (int p = 0; p < propSpec.length; p += 2) {
                 Object key = propSpec[p];
                 Object value = propSpec[p + 1];
@@ -703,7 +737,23 @@ public class Ocr {
         return props;
     }
 
-    private static String propsToString(Properties props) {
+    private static Properties stringToProps(String spec) {
+        Properties props = new Properties();
+        StringTokenizer stProps = new StringTokenizer(spec, CONFIG_PROP_SEPARATOR);
+        while(stProps.hasMoreTokens()) {
+            String tokenProp = stProps.nextToken();
+            if(tokenProp == null || tokenProp.trim().length() == 0) {
+                continue;
+            }
+            StringTokenizer stKeyVal = new StringTokenizer(tokenProp, CONFIG_PROP_KEY_VALUE_SEPARATOR);
+            if(stKeyVal.countTokens() == 2) {
+                props.setProperty(stKeyVal.nextToken().trim(), stKeyVal.nextToken().trim());
+            }
+        }
+        return props;
+    }
+
+    public static String propsToString(Properties props) {
         StringBuilder sb = new StringBuilder();
         for(Object key : props.keySet()) {
             if(sb.length() > 0) {

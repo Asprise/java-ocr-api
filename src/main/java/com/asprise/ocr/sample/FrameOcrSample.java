@@ -20,6 +20,8 @@ package com.asprise.ocr.sample;
 
 import com.asprise.ocr.Ocr;
 import com.asprise.ocr.sample.util.AdditionalPaintable;
+import com.asprise.ocr.util.StringUtils;
+import com.asprise.ocr.util.Utils;
 
 import javax.imageio.ImageIO;
 import javax.swing.JComponent;
@@ -72,6 +74,7 @@ public class FrameOcrSample extends javax.swing.JFrame {
 
     Ocr ocr;
     String currentLang;
+    String currentPropsStart;
 
     void init() {
 
@@ -108,8 +111,10 @@ public class FrameOcrSample extends javax.swing.JFrame {
                     String lang = panelOcrInput.getLanguage();
                     ocr = new Ocr();
                     if(isLanguageSupported(lang)) {
-                        ocr.startEngine(lang, Ocr.SPEED_FASTEST);
+                        String propsStart = panelOcrInput.getPropsStart();
+                        ocr.startEngine(lang, Ocr.SPEED_FASTEST, propsStart);
                         currentLang = lang;
+                        currentPropsStart = propsStart;
                     }
                 } catch (Throwable t) {
                     log("Failed to start OCR engine - please contact support: support@asprise.com", t);
@@ -161,6 +166,8 @@ public class FrameOcrSample extends javax.swing.JFrame {
             }
 
             String language = panelOcrInput.getLanguage();
+            String propsStart = panelOcrInput.getPropsStart();
+            String propsRecognize = panelOcrInput.getPropsRecognition();
             if(! isLanguageSupported(language)) {
                 String errorString = "Language '" + language + "' is not available in this trial. Please contact support@asprise.com";
                 log(errorString);
@@ -175,43 +182,60 @@ public class FrameOcrSample extends javax.swing.JFrame {
                     .setOutputSeparateWords(panelOcrInput.isWordLevelChecked())
                     .setPdfTextVisible(panelOcrInput.isPdfHighlightTextChecked());
 
-            if(ocr.isEngineRunning() && (!currentLang.equals(language))) {
+            if(ocr.isEngineRunning() &&
+                    ((!StringUtils.equals(currentLang, language, true)) || (!StringUtils.equals(currentPropsStart, propsStart, true))) ) {
                 ocr.stopEngine();
                 ocr = new Ocr(); 
             }
 
             if(! ocr.isEngineRunning()) {
-                ocr.startEngine(language, Ocr.SPEED_FASTEST);
+                ocr.startEngine(language, Ocr.SPEED_FASTEST, propsStart);
                 currentLang = language;
+                currentPropsStart = propsStart;
             }
 
             String recognizeType = panelOcrInput.getRecognizeType().toLowerCase().contains("text") ?
                     (panelOcrInput.getRecognizeType().toLowerCase().contains("barcode") ? Ocr.RECOGNIZE_TYPE_ALL : Ocr.RECOGNIZE_TYPE_TEXT) : Ocr.RECOGNIZE_TYPE_BARCODE;
-            String outputFormat = panelOcrInput.getOutputFormat().toLowerCase().contains("pdf") ?
-                   Ocr.OUTPUT_FORMAT_PDF : (panelOcrInput.getOutputFormat().toLowerCase().contains("text") ? Ocr.OUTPUT_FORMAT_PLAINTEXT : Ocr.OUTPUT_FORMAT_XML);
-
-            String status = "Recognizing " + recognizeType + " to output as " + outputFormat + " on image: " + files + " ...";
-            log(status);
-            showText(status, false);
+            String outputFormat = panelOcrInput.getOutputFormat();
 
             File outputFile = new File("asprise-ocr-" + new SimpleDateFormat("yyyy_MM_dd-HH_mm_ss_SSS").format(new Date()) + "."
-            + (outputFormat.equals(Ocr.OUTPUT_FORMAT_XML) ? "xml" : (outputFormat.equals(Ocr.OUTPUT_FORMAT_PDF) ? "pdf" : "txt")));
+            + (outputFormat.equals(Ocr.OUTPUT_FORMAT_PLAINTEXT) ? "txt" : outputFormat));
 
             if(outputFormat.equals(Ocr.OUTPUT_FORMAT_PDF)) {
                 propertyBuilder.setPdfOutputFile(outputFile).setPdfImageForceBlackWhite(true).setOutputSeparateWords(true);
             }
+            if(outputFormat.equals(Ocr.OUTPUT_FORMAT_RTF)) {
+                propertyBuilder.setRtfOutputFile(outputFile).setOutputSeparateWords(false);
+            }
 
-            String s = ocr.recognize(files, Ocr.PAGES_ALL, -1, -1, -1, -1, recognizeType, outputFormat, propertyBuilder);
-            if(outputFormat == Ocr.OUTPUT_FORMAT_PLAINTEXT) {
+            String allRecogProps = Ocr.propsToString(propertyBuilder) +
+                    (StringUtils.isEmpty(propsRecognize) ? "" : Ocr.CONFIG_PROP_SEPARATOR + propsRecognize);
+            String status = "Recognizing " + recognizeType + " to output as " + outputFormat + " on image: " + files + " ...\n" +
+                "OCR engine start props: " + currentPropsStart + "\n" +
+                "OCR recognition props:  " + allRecogProps + "\n" +
+                "Please standby ... " + (Utils.isWindows() ? "" : "Trial version on Unix: q, x, 0, and 9 will be replaced with *")   ;
+
+            log(status);
+            showText(status, false);
+
+            String s = ocr.recognize(files, Ocr.PAGES_ALL, -1, -1, -1, -1, recognizeType, outputFormat, allRecogProps);
+            if(Ocr.OUTPUT_FORMAT_PLAINTEXT.equals(outputFormat)) {
                 showText(s, false);
-            } else if(outputFormat == Ocr.OUTPUT_FORMAT_XML) {
+            } else if(Ocr.OUTPUT_FORMAT_XML.equals(outputFormat)) {
                 writeStringToFile(s, outputFile);
-                showText("You may view the XML file using IE or Firefox: " + outputFile.getAbsolutePath(), false);
+                showText("You may view the XML file using IE, Firefox or Safari: " + outputFile.getAbsolutePath(), false);
                 showText(s, true);
                 Ocr.saveAocrXslToDir(outputFile.getAbsoluteFile().getParentFile(), false);
-                Desktop.getDesktop().browse(outputFile.toURI());
-            } else if(outputFormat == Ocr.OUTPUT_FORMAT_PDF) {
+                try {
+                    Desktop.getDesktop().browse(outputFile.getAbsoluteFile().toURI());
+                } catch (Throwable t) {
+                    Desktop.getDesktop().open(outputFile);
+                }
+            } else if(Ocr.OUTPUT_FORMAT_PDF.equals(outputFormat)) {
                 showText("PDF file has been generated: " + outputFile.getAbsolutePath(), false);
+                Desktop.getDesktop().open(outputFile);
+            } else if(Ocr.OUTPUT_FORMAT_RTF.equals(outputFormat)) {
+                showText("RTF file has been generated: " + outputFile.getAbsolutePath(), false);
                 Desktop.getDesktop().open(outputFile);
             } else {
                 showText(s, false);
@@ -264,11 +288,19 @@ public class FrameOcrSample extends javax.swing.JFrame {
             });
             return;
         }
+        String textProcessed = text == null ? "(null)" : text;
         if(!append) {
-            textLogging.setText(text);
+            textLogging.setText(textProcessed);
         } else {
-            textLogging.append(textLogging.getText().length() == 0 ? text : "\n" + text);
+            textLogging.append(textLogging.getText().length() == 0 ? textProcessed : "\n" + textProcessed);
+        }
 
+        String content = textLogging.getText();
+        if(content.length() > 2) {
+            int lastLinePos = text.lastIndexOf("\n", content.length() - 2);
+            if(lastLinePos > 0) {
+                textLogging.setCaretPosition(lastLinePos + 1); 
+            }
         }
     }
 

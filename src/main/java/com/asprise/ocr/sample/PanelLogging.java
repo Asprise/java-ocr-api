@@ -76,7 +76,14 @@ public class PanelLogging extends javax.swing.JPanel {
             return;
         }
         textArea.append(textArea.getText().length() == 0 ? mesg : "\n" + mesg);
-        textArea.setCaretPosition(textArea.getText().length() - 1);
+
+        String text = textArea.getText();
+        if(text.length() > 2) {
+            int lastLinePos = text.lastIndexOf("\n", text.length() - 2);
+            if(lastLinePos > 0) {
+                textArea.setCaretPosition(lastLinePos + 1); 
+            }
+        }
     }
 
     String formatMessage(String mesg) {
